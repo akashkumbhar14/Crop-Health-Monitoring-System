@@ -1,2 +1,2 @@
 # Crop-Health-Monitoring-System
-**Smart Crop Health Monitoring System** is an AI-powered platform that uses satellite imagery and NDVI analysis to detect early crop stress such as nutrient deficiency, water stress, and pests. It provides personalized, local-language advisories via SMS, enabling timely decisions, improved yield, and sustainable farming.
+**Smart Crop Health Monitoring System** is an AI-powered platform that uses satellite imagery and NDVI analysis to detect early crop stress such as nutrient deficiency, water stress, and pests. It provides personalized, local-language advisories via SMS, enabling timely decisions, improved yield, and sustainable farming.!
