@@ -1,4 +1,4 @@
-import React, {useState} from 'react'
+import React, { useState } from 'react'
 import {
 	View,
 	Text,
@@ -7,15 +7,20 @@ import {
 	TouchableOpacity,
 	KeyboardAvoidingView,
 	Platform,
-	Image,
+	Alert,
 } from 'react-native'
+import { CREDENTIALS } from '../../utils'
 
-export default function LoginScreen({ onSignupPress = () => {}, onLoginPress = () => {} }) {
-	const [identifier, setIdentifier] = useState('')
+export default function LoginScreen({ navigation }) {
+	const [email, setEmail] = useState('')
 	const [password, setPassword] = useState('')
 
 	const handleLogin = () => {
-		onLoginPress({ identifier, password })
+		if (email === CREDENTIALS.email && password === CREDENTIALS.password) {
+			navigation.replace('Dashboard', { email })
+		} else {
+			Alert.alert('Login failed', 'Invalid email or password')
+		}
 	}
 
 	return (
@@ -31,11 +36,11 @@ export default function LoginScreen({ onSignupPress = () => {}, onLoginPress = (
 			</View>
 
 			<View style={styles.card}>
-				<Text style={styles.label}>Email or Phone</Text>
+				<Text style={styles.label}>Email</Text>
 				<TextInput
-					value={identifier}
-					onChangeText={setIdentifier}
-					placeholder="you@example.com or +123456789"
+					value={email}
+					onChangeText={setEmail}
+					placeholder="you@example.com"
 					style={styles.input}
 					keyboardType="email-address"
 					autoCapitalize="none"
@@ -56,7 +61,7 @@ export default function LoginScreen({ onSignupPress = () => {}, onLoginPress = (
 
 				<View style={styles.rowRight}>
 					<Text style={styles.smallText}>Don't have an account?</Text>
-					<TouchableOpacity onPress={onSignupPress}>
+					<TouchableOpacity onPress={() => navigation.navigate('Signup')}>
 						<Text style={styles.link}> Sign up</Text>
 					</TouchableOpacity>
 				</View>
@@ -109,9 +114,6 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 	},
 	buttonText: { color: '#fff', fontWeight: '700' },
-	smallText: { color: '#6b6f62' },
-	link: { color: '#2e7d32', fontWeight: '700' },
-	rowRight: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12, alignItems: 'center' },
 	footer: { alignItems: 'center', padding: 12 },
 	footerText: { color: '#6b6f62' },
 })
