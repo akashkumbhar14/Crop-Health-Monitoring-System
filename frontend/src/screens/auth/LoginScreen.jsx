@@ -4,195 +4,341 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  Alert,
   ActivityIndicator,
+  Alert,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../../services/api';
 
-const LoginScreen = ({ navigation }) => {
+const LoginScreen = () => {
+  const navigation = useNavigation();
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // 📌 SEND OTP
   const handleSendOTP = async () => {
     if (!phone.trim()) {
-      Alert.alert('Error', 'Please enter phone number');
+      Alert.alert('Error', 'Enter phone number');
       return;
     }
 
-    setLoading(true);
     try {
-      const data = await authAPI.sendOTP({ phone: phone.trim() });
+      setLoading(true);
+
+      const formattedPhone = phone.startsWith('+')
+        ? phone.trim()
+        : `+91${phone.trim()}`;
+
+      const data = await authAPI.sendOTP({ phone: formattedPhone });
 
       setOtpSent(true);
-      Alert.alert('Success', data.message || 'OTP sent');
 
-      // DEV MODE OTP
       if (data.dev_otp) {
         Alert.alert('DEV OTP', data.dev_otp);
       }
+
     } catch (error) {
-      console.log(error);
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to send OTP');
+      console.log("SEND OTP ERROR:", error?.response?.data || error);
+
+      Alert.alert(
+        'Error',
+        error.response?.data?.detail || 'Failed to send OTP'
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // 📌 VERIFY OTP
   const handleVerifyOTP = async () => {
-    if (!phone.trim()) {
-      Alert.alert('Error', 'Please enter phone number');
+    if (!otp || otp.length !== 6) {
+      Alert.alert('Error', 'Enter valid OTP');
       return;
     }
 
-    if (!otp.trim()) {
-      Alert.alert('Error', 'Please enter OTP');
-      return;
-    }
-
-    setLoading(true);
     try {
-      const data = await authAPI.verifyOTP({
-        phone: phone.trim(),
-        otp: otp.trim(),
+      setLoading(true);
+
+      const formattedPhone = phone.startsWith('+')
+        ? phone.trim()
+        : `+91${phone.trim()}`;
+
+      const res = await authAPI.verifyOTP({
+        phone: formattedPhone,
+        otp,
       });
 
-      if (data.is_new_farmer) {
-        navigation.navigate('Signup', { phone: phone.trim() });
+      console.log("VERIFY RESPONSE:", res);
+
+      if (res.is_new_farmer) {
+        navigation.navigate('Signup', { phone: formattedPhone });
       } else {
-        navigation.replace('Home');
+        navigation.navigate('Home');
       }
+
     } catch (error) {
-      console.log(error);
-      Alert.alert('Error', error.response?.data?.detail || 'Invalid OTP');
+      console.log("VERIFY ERROR:", error?.response?.data || error);
+
+      Alert.alert(
+        'Error',
+        error.response?.data?.detail || 'OTP failed'
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome Back 🌱</Text>
-      <Text style={styles.subtitle}>Crop Health Monitoring</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        {/* Top Navigation Row */}
+        <View style={styles.topRow}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.backText}>‹ Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutButton} onPress={async () => {
+            await AsyncStorage.removeItem('access_token');
+            await AsyncStorage.removeItem('refresh_token');
+            await AsyncStorage.removeItem('farmer_profile');
+            navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+          }}>
+            <Text style={styles.logoutText}>Reset</Text>
+          </TouchableOpacity>
+        </View>
 
-      {!otpSent ? (
-        <>
-          <Text style={styles.label}>Phone Number</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="+919876543210"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            editable={!loading}
-          />
+        <View style={styles.content}>
+          
+          {/* Main Login Card */}
+          <View style={styles.card}>
+            <View style={styles.brandIconContainer}>
+              <Text style={styles.brandIcon}>🌿</Text>
+            </View>
+            <Text style={styles.title}>AgriAI</Text>
+            <Text style={styles.subtitle}>Intelligent Crop Health Monitoring</Text>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleSendOTP}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
+            {!otpSent ? (
+              <View style={styles.formContainer}>
+                <Text style={styles.label}>Phone Number</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="9876543210"
+                  keyboardType="phone-pad"
+                  value={phone}
+                  onChangeText={setPhone}
+                  editable={!loading}
+                  placeholderTextColor="#8EA696"
+                />
+
+                <TouchableOpacity
+                  style={[styles.button, loading && styles.buttonDisabled]}
+                  onPress={handleSendOTP}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.buttonText}>Send OTP</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             ) : (
-              <Text style={styles.buttonText}>Send OTP</Text>
+              <View style={styles.formContainer}>
+                <Text style={styles.label}>Enter Verification Code</Text>
+                <Text style={styles.otpHint}>Secure code sent to {phone}</Text>
+
+                <TextInput
+                  style={[styles.input, styles.otpInput]}
+                  placeholder="000000"
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  value={otp}
+                  onChangeText={setOtp}
+                  editable={!loading}
+                  placeholderTextColor="#8EA696"
+                />
+
+                <TouchableOpacity
+                  style={[styles.button, loading && styles.buttonDisabled]}
+                  onPress={handleVerifyOTP}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.buttonText}>Verify & Login</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={() => { setOtpSent(false); setOtp(''); }} style={styles.linkButton}>
+                  <Text style={styles.linkText}>Change Phone Number</Text>
+                </TouchableOpacity>
+              </View>
             )}
-          </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          <Text style={styles.label}>Enter OTP</Text>
-          <Text style={styles.info}>OTP sent to {phone}</Text>
+          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="000000"
-            value={otp}
-            onChangeText={setOtp}
-            keyboardType="numeric"
-            maxLength={6}
-            editable={!loading}
-          />
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleVerifyOTP}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Verify OTP</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => setOtpSent(false)}>
-            <Text style={styles.changePhoneText}>Change phone number?</Text>
-          </TouchableOpacity>
-        </>
-      )}
-    </View>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
-export default LoginScreen;
-
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#E6F5EA', // Light organic green
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F4F7F3',
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? 20 : 10,
+  },
+  backButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  backText: {
+    color: '#1F4A32',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  logoutButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F8D7DA',
+  },
+  logoutText: {
+    color: '#D32F2F',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  content: {
+    flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 20,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    elevation: 4,
+    alignItems: 'center',
+  },
+  brandIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F4F7F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  brandIcon: {
+    fontSize: 32,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
+    color: '#1F4A32', // Deep forest green
+    marginBottom: 6,
     textAlign: 'center',
-    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
+    color: '#4F6B5C', // Muted grey-green
     textAlign: 'center',
-    color: '#666',
-    marginBottom: 30,
+    marginBottom: 32,
+  },
+  formContainer: {
+    width: '100%',
   },
   label: {
     fontSize: 14,
+    fontWeight: '600',
+    color: '#1F4A32',
     marginBottom: 8,
+    marginLeft: 4,
   },
   input: {
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    backgroundColor: '#F4F7F3',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#D1E8DA',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 24,
+    fontSize: 16,
+    color: '#1F4A32',
+  },
+  otpInput: {
+    textAlign: 'center',
+    fontSize: 24,
+    fontWeight: 'bold',
+    letterSpacing: 4,
   },
   button: {
-    backgroundColor: '#327941',
-    padding: 14,
-    borderRadius: 8,
+    backgroundColor: '#1F4A32',
+    paddingVertical: 16,
+    borderRadius: 999, // Pill shape
     alignItems: 'center',
+    shadowColor: '#1F4A32',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    backgroundColor: '#8EA696',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   buttonText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
-  info: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 10,
+  otpHint: {
+    fontSize: 13,
+    color: '#4F6B5C',
+    marginBottom: 16,
+    marginLeft: 4,
   },
-  changePhoneText: {
-    textAlign: 'center',
-    marginTop: 16,
-    color: '#327941',
+  linkButton: {
+    marginTop: 20,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  linkText: {
+    color: '#86B342', // Accent green
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
+
+export default LoginScreen;

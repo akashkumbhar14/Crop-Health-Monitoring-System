@@ -13,13 +13,15 @@ const api = axios.create({
 // Attach token
 api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('access_token');
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
-// Handle refresh
+// Refresh token handler
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -51,9 +53,10 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-  sendOTP: (data: Record<string, unknown>) => api.post('/auth/send-otp', data).then(res => res.data),
+  sendOTP: (data: any) =>
+    api.post('/auth/send-otp', data).then(res => res.data),
 
-  verifyOTP: async (data: Record<string, unknown>) => {
+  verifyOTP: async (data: any) => {
     const res = await api.post('/auth/verify-otp', data);
 
     await AsyncStorage.setItem('access_token', res.data.access_token);
@@ -62,8 +65,11 @@ export const authAPI = {
     return res.data;
   },
 
-  completeProfile: (data: Record<string, unknown>) =>
+  completeProfile: (data: any) =>
     api.post('/auth/complete-profile', data).then(res => res.data),
+
+  getProfile: () =>
+    api.get('/auth/me').then(res => res.data),
 };
 
 export default api;
