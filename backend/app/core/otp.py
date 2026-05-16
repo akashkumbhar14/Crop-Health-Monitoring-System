@@ -19,10 +19,7 @@ async def send_otp_sms(phone: str, otp: str) -> bool:
     Falls back to console log in development mode.
     """
     if settings.APP_ENV == "development" or not settings.TWILIO_ACCOUNT_SID:
-        logger.info(f"[DEV MODE] OTP for {phone}: {otp}")
-        print(f"\n{'='*40}")
-        print(f"  DEV OTP for {phone}:  {otp}")
-        print(f"{'='*40}\n")
+        logger.info(f"DEV OTP for {phone}: {otp}")
         return True
 
     try:
@@ -33,7 +30,7 @@ async def send_otp_sms(phone: str, otp: str) -> bool:
             from_=settings.TWILIO_PHONE_NUMBER,
             to=phone,
         )
-        logger.info(f"OTP SMS sent to {phone}, SID: {message.sid}")
+        logger.info(f"OTP SMS sent to {phone} SID: {message.sid}")
         return True
     except Exception as e:
         logger.error(f"Failed to send OTP to {phone}: {e}")
@@ -43,7 +40,7 @@ async def send_otp_sms(phone: str, otp: str) -> bool:
 async def store_otp(db, phone: str, otp: str):
     """
     Stores OTP in MongoDB otp_store collection.
-    MongoDB TTL index auto-deletes it after 10 minutes.
+    MongoDB TTL index auto-deletes after 10 minutes.
     Upserts — replaces old OTP if farmer requests again.
     """
     await db.otp_store.update_one(
@@ -64,7 +61,7 @@ async def store_otp(db, phone: str, otp: str):
 async def verify_otp(db, phone: str, otp: str) -> dict:
     """
     Verifies OTP from database.
-    Returns dict with "success" bool and "reason" string.
+    Returns dict with success bool and reason string.
     Limits to 5 attempts to prevent brute force.
     """
     record = await db.otp_store.find_one({"phone": phone})
