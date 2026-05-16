@@ -1,20 +1,21 @@
+import logging
 from datetime import datetime
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException, status
-from app.models.farmer import CompleteProfileRequest, UpdateFarmRequest
-import logging
+from app.schemas.farmer_schema import CompleteProfileRequest, UpdateFarmRequest
 
 logger = logging.getLogger(__name__)
 
 
-def _serialize_farmer(doc: dict) -> dict:
+def _serialize_farmer(doc: dict) -> dict | None:
     """
-    Converts MongoDB document to a JSON-serializable dict.
-    Converts ObjectId → string, handles nested objects.
+    Converts MongoDB document to JSON-serializable dict.
+    Works on a copy — never mutates the original document.
     """
     if doc is None:
         return None
+    doc = dict(doc)
     doc["id"] = str(doc.pop("_id"))
     return doc
 
@@ -22,7 +23,7 @@ def _serialize_farmer(doc: dict) -> dict:
 class FarmerService:
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
-        self.col = db.farmers   # shorthand
+        self.col = db.farmers
 
     async def get_by_phone(self, phone: str) -> dict | None:
         """Returns farmer document or None if not found."""
@@ -39,8 +40,8 @@ class FarmerService:
 
     async def create_farmer(self, phone: str) -> dict:
         """
-        Creates a minimal farmer record on first OTP verification.
-        Profile is completed in a second step.
+        Creates minimal farmer record on first OTP verification.
+        Profile completed in second step via complete_profile.
         """
         now = datetime.utcnow()
         doc = {
@@ -49,13 +50,13 @@ class FarmerService:
             "language": "english",
             "farm": None,
             "is_profile_complete": False,
+            "is_active": True,
             "created_at": now,
             "updated_at": now,
-            "is_active": True,
         }
         result = await self.col.insert_one(doc)
         doc["_id"] = result.inserted_id
-        logger.info(f"New farmer created: {phone}, id: {result.inserted_id}")
+        logger.info(f"New farmer created: {phone} id: {result.inserted_id}")
         return _serialize_farmer(doc)
 
     async def complete_profile(
@@ -63,13 +64,13 @@ class FarmerService:
     ) -> dict:
         """
         Sets name, language, and farm details after OTP verification.
-        Called from the onboarding screen.
+        Called from onboarding screen.
         """
         farmer = await self.get_by_phone(phone)
         if not farmer:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Farmer not found. Please verify OTP first."
+                detail="Farmer not found. Please verify OTP first.",
             )
 
         update_data = {
@@ -79,11 +80,8 @@ class FarmerService:
             "updated_at": datetime.utcnow(),
         }
 
-        # Add farm details if provided
         if data.farm:
-            farm_dict = data.farm.model_dump(exclude_none=True)
-            # Convert planting_date if provided
-            update_data["farm"] = farm_dict
+            update_data["farm"] = data.farm.model_dump(exclude_none=True)
 
         await self.col.update_one(
             {"phone": phone},
@@ -113,7 +111,7 @@ class FarmerService:
         if result.matched_count == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Farmer not found."
+                detail="Farmer not found.",
             )
 
         return await self.get_by_id(farmer_id)

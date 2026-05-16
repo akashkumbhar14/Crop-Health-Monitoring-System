@@ -1,22 +1,19 @@
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.config import settings
-import logging
+from app.db.mongodb import get_db
 
 logger = logging.getLogger(__name__)
 
-# FastAPI security scheme —"Authorize" button in Swagger UI
 bearer_scheme = HTTPBearer()
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Creates a signed JWT access token.
-    data must include: {"sub": farmer_id_string}
-    """
+    """Creates a signed JWT access token. data must include {"sub": farmer_id}"""
     to_encode = data.copy()
     expire = datetime.utcnow() + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -26,10 +23,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def create_refresh_token(data: dict) -> str:
-    """
-    Creates a longer-lived refresh token.
-    Used to silently re-issue access tokens without re-login.
-    """
+    """Creates a longer-lived refresh token."""
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
@@ -37,10 +31,7 @@ def create_refresh_token(data: dict) -> str:
 
 
 def decode_token(token: str) -> dict:
-    """
-    Decodes and validates a JWT token.
-    Raises HTTPException 401 if expired or invalid.
-    """
+    """Decodes and validates a JWT token. Raises 401 if expired or invalid."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
@@ -55,14 +46,15 @@ def decode_token(token: str) -> dict:
 
 async def get_current_farmer(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db=Depends(get_db),
 ):
     """
-    FastAPI dependency — injects current farmer ID into any protected route.
+    FastAPI dependency — injects full farmer document into any protected route.
+    Fetches farmer from MongoDB using farmer_id from JWT.
 
-    Usage in a route:
-        @router.get("/me")
-        async def get_me(farmer_id: str = Depends(get_current_farmer)):
-            ...
+    Usage:
+        async def my_route(farmer=Depends(get_current_farmer)):
+            user_id = str(farmer["_id"])
     """
     token = credentials.credentials
     payload = decode_token(token)
@@ -82,4 +74,20 @@ async def get_current_farmer(
             detail="Please use an access token, not a refresh token.",
         )
 
-    return farmer_id    
+    # Fetch full farmer document from MongoDB
+    from bson import ObjectId
+    farmer = await db.farmers.find_one({"_id": ObjectId(farmer_id)})
+
+    if not farmer:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Farmer account not found.",
+        )
+
+    if not farmer.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Farmer account is deactivated.",
+        )
+
+    return farmer

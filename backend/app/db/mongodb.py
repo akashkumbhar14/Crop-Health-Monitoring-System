@@ -4,33 +4,25 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Global client instance (reused across requests)
 _client: AsyncIOMotorClient = None
 _db: AsyncIOMotorDatabase = None
 
 
 async def connect_db():
-    """
-    Called once at app startup.
-    Creates MongoDB connection and builds all indexes.
-    """
+    """Called once at app startup."""
     global _client, _db
 
-    logger.info(f"Connecting to MongoDB at {settings.MONGODB_URL}...")
     _client = AsyncIOMotorClient(
         settings.MONGODB_URL,
-        serverSelectionTimeoutMS=5000,    # fail fast if mongo is down
+        serverSelectionTimeoutMS=5000,
         maxPoolSize=10,
         minPoolSize=2,
     )
 
     _db = _client[settings.MONGODB_DB_NAME]
-
-    # Verify connection
     await _client.admin.command("ping")
     logger.info(f"MongoDB connected — database: '{settings.MONGODB_DB_NAME}'")
 
-    # Build indexes on startup
     await _create_indexes()
 
 
@@ -39,14 +31,13 @@ async def close_db():
     global _client
     if _client:
         _client.close()
-        logger.info("MongoDB connection closed.")
+        logger.info("MongoDB connection closed")
 
 
 def get_db() -> AsyncIOMotorDatabase:
     """
     Dependency injected into FastAPI routes.
     Usage:
-        from app.db.mongodb import get_db
         async def my_route(db = Depends(get_db)):
     """
     if _db is None:
@@ -55,33 +46,28 @@ def get_db() -> AsyncIOMotorDatabase:
 
 
 async def _create_indexes():
-    """
-    Create all MongoDB indexes.
-    Run once at startup — idempotent (safe to run multiple times).
-    """
+    """Create all indexes at startup. Safe to run multiple times."""
     db = get_db()
 
-    # farmers collection
+    # farmers
     await db.farmers.create_index("phone", unique=True)
     await db.farmers.create_index("created_at")
-    await db.farmers.create_index(
-        [("farm.location", "2dsphere")]   # geo queries — find farmers near a point
-    )
+    await db.farmers.create_index([("farm.location", "2dsphere")])
 
-    # otp_store collection — auto-expire after 10 minutes
+    # otp_store — auto-expire after 10 minutes
     await db.otp_store.create_index("phone", unique=True)
-    await db.otp_store.create_index(
-        "created_at",
-        expireAfterSeconds=600            # MongoDB TTL index — auto-deletes expired OTPs
-    )
+    await db.otp_store.create_index("created_at", expireAfterSeconds=600)
 
-    # ndvi_records collection
-    await db.ndvi_records.create_index([("farmer_id", 1), ("captured_at", -1)])
-
-    # advisories collection
-    await db.advisories.create_index([("farmer_id", 1), ("created_at", -1)])
-
-    # disease_detections collection
+    # disease_detections
     await db.disease_detections.create_index([("farmer_id", 1), ("detected_at", -1)])
 
-    logger.info("MongoDB indexes created/verified.")
+    # advisories
+    await db.advisories.create_index([("farmer_id", 1), ("created_at", -1)])
+
+    # conversation_memory — auto-expire after configured TTL
+    await db.conversation_memory.create_index("user_id", unique=True)
+    await db.conversation_memory.create_index(
+        "expires_at", expireAfterSeconds=0
+    )
+
+    logger.info("MongoDB indexes created/verified")
